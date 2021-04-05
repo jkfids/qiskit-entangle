@@ -19,6 +19,7 @@ class GraphState:
         self.nqubits = len(backend.properties().qubits)
         self.edges = self.get_edges()
         self.nedges = len(self.edges)
+        self.tomography_targets = self.get_tomography_targets()
         self.graphstate_circuit = self.gen_graphstate()
         
     def get_edges(self):
@@ -39,9 +40,25 @@ class GraphState:
             edges.append((edges_matrix[i,0], edges_matrix[i,1]))
         return edges
     
+    def get_tomography_targets(self):
+        """
+        Get a dictionary of tomography targets with target edges as keys and
+        and neighbouring edges as values
+        """
+        tomography_targets = {}
+        for edge in self.edges:
+            other_edges = self.edges.copy()
+            other_edges.remove(edge)
+            connected_edges = []
+            for edgej in other_edges:
+                if (edge[0] in edgej) | (edge[1] in edgej):
+                    connected_edges.append(edgej)
+            tomography_targets[edge] = connected_edges
+        return tomography_targets
+
     def gen_graphstate(self):
         """
-        Generate a full graph state for the whole IBM device
+        Generate a graph state circuit for the whole IBM device
         """
         graphstate = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edges.copy()
@@ -61,3 +78,8 @@ class GraphState:
             for edge in remove:
                 unconnected_edges.remove(edge)   
         return graphstate
+    
+    def gen_tomography_circuits(self):
+        pass
+    
+

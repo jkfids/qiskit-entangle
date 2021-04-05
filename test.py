@@ -17,7 +17,7 @@ import utilities as util
 util.startup()
 provider = IBMQ.get_provider('ibm-q-melbourne')
 
-device = 'ibmq_sydney'
+device = 'ibmq_manhattan'
 backend = provider.get_backend(device)
 test = GraphState(backend)
 print(f'Device: {device}')
