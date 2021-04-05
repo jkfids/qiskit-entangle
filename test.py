@@ -9,8 +9,6 @@ Created on Sat Mar 27 18:27:54 2021
 from qiskit import IBMQ
 
 # Import other standard libraries
-import numpy as np
-from time import time
 
 # Import local modules
 from graphstate import GraphState
