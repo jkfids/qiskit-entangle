@@ -1,2 +1,5 @@
 
 *.pyc
+.ipynb_checkpoints/test-checkpoint.py
+.ipynb_checkpoints/demonstration-checkpoint.ipynb
+.ipynb_checkpoints/graphstate-checkpoint.py

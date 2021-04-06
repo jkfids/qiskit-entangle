@@ -13,6 +13,8 @@ from qiskit import QuantumCircuit
 
 class GraphState:
     """
+    Construct a graph state circuit over the whole device and perform quantum
+    state tomography over each edge pair bell state
     """
     def __init__(self, backend):
         self.backend = backend
@@ -20,7 +22,9 @@ class GraphState:
         self.edges = self.get_edges()
         self.nedges = len(self.edges)
         self.tomography_targets = self.get_tomography_targets()
-        self.graphstate_circuit = self.gen_graphstate()
+        self.tomography_batches = self.get_tomography_batches()
+        self.nbatches = len(self.tomography_batches)
+        self.circuit = self.gen_circuit()
         
     def get_edges(self):
         """
@@ -29,7 +33,7 @@ class GraphState:
         """
         edges = []
         edges_matrix = np.array([], dtype=np.int16).reshape(0,2)
-        # Iterate over possible cnot connections to construct a matrix of edges
+        # Iterate over possible cnot connections to construct an array of edges
         for gate in self.backend.properties().gates:
             if gate.gate == 'cx':
                 if gate.qubits[0] < gate.qubits[1]:
@@ -56,28 +60,49 @@ class GraphState:
             tomography_targets[edge] = connected_edges
         return tomography_targets
 
-    def gen_graphstate(self):
+    def get_tomography_batches(self):
+        """
+        Get a dictionary of batches
+        """
+        batches = {}
+        unbatched_edges = self.edges.copy()
+        i = 0
+        while unbatched_edges:
+            batches[f'batch{i}'] = []
+            batched_qubits = []
+            remove = []
+            for edge in unbatched_edges:
+                qubits = sum(self.tomography_targets[edge], ())
+                if np.any(np.isin(qubits, batched_qubits)) == False:
+                    batches[f'batch{i}'].append(edge)
+                    batched_qubits.extend(sum(self.tomography_targets[edge], ()))
+                    remove.append(edge)
+            for edge in remove:
+                unbatched_edges.remove(edge)
+            i += 1
+        return batches
+
+    def gen_circuit(self):
         """
         Generate a graph state circuit for the whole IBM device
         """
-        graphstate = QuantumCircuit(self.nqubits)
+        circuit = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edges.copy()
         # Apply Hadamard gates to every qubit
-        graphstate.h(list(range(self.nqubits)))
+        circuit.h(list(range(self.nqubits)))
         # Connect every edge with cz gates
         while unconnected_edges:
             connected_qubits = [] # Qubits connected in the same time step
             remove = []
             for edge in unconnected_edges:
                 if (edge[0] in connected_qubits) | (edge[1] in connected_qubits) == False:
-                    graphstate.cz(edge[0], edge[1])
-                    connected_qubits.append(edge[0])
-                    connected_qubits.append(edge[1])
+                    circuit.cz(edge[0], edge[1])
+                    connected_qubits.extend(edge)
                     remove.append(edge)
             # Remove connected edges
             for edge in remove:
                 unconnected_edges.remove(edge)   
-        return graphstate
+        return circuit
     
     def gen_tomography_circuits(self):
         pass
