@@ -28,8 +28,8 @@ class GraphState:
         
     def get_edges(self):
         """
-        Get a sorted list of physical edges, where each edge is a two element 
-        tuple corresponding to qubit pairs
+        Get a sorted list of unique physical edges, where each edge is a two 
+        element tuple corresponding to qubit pairs
         """
         edges = []
         edges_matrix = np.array([], dtype=np.int16).reshape(0,2)
@@ -47,7 +47,7 @@ class GraphState:
     def get_tomography_targets(self):
         """
         Get a dictionary of tomography targets with target edges as keys and
-        and neighbouring edges as values
+        neighbouring edges as values
         """
         tomography_targets = {}
         for edge in self.edges:
@@ -62,7 +62,8 @@ class GraphState:
 
     def get_tomography_batches(self):
         """
-        Get a dictionary of batches
+        Get a dictionary of tomography batches, where keys are batch numbers
+        and values are a list of target edges
         """
         batches = {}
         unbatched_edges = self.edges.copy()
@@ -73,6 +74,8 @@ class GraphState:
             remove = []
             for edge in unbatched_edges:
                 qubits = sum(self.tomography_targets[edge], ())
+                # Append edge to batch only if target and adjacent qubits have 
+                # not been batched in the current cycle
                 if np.any(np.isin(qubits, batched_qubits)) == False:
                     batches[f'batch{i}'].append(edge)
                     batched_qubits.extend(sum(self.tomography_targets[edge], ()))
@@ -84,7 +87,7 @@ class GraphState:
 
     def gen_circuit(self):
         """
-        Generate a graph state circuit for the whole IBM device
+        Generate a qiskit graph state circuit for the whole device
         """
         circuit = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edges.copy()
