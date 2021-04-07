@@ -55,7 +55,7 @@ class GraphState:
             other_edges.remove(edge)
             connected_edges = []
             for edgej in other_edges:
-                if (edge[0] in edgej) | (edge[1] in edgej):
+                if np.any(np.isin(edge, edgej)):
                     connected_edges.append(edgej)
             tomography_targets[edge] = connected_edges
         return tomography_targets
@@ -98,16 +98,15 @@ class GraphState:
             connected_qubits = [] # Qubits connected in the same time step
             remove = []
             for edge in unconnected_edges:
-                if (edge[0] in connected_qubits) | (edge[1] in connected_qubits) == False:
+                if np.any(np.isin(edge, connected_qubits)) == False:
                     circuit.cz(edge[0], edge[1])
                     connected_qubits.extend(edge)
                     remove.append(edge)
-            # Remove connected edges
+            # Remove connected edges from unconnected edges list
             for edge in remove:
                 unconnected_edges.remove(edge)   
         return circuit
     
     def gen_tomography_circuits(self):
         pass
-    
 
