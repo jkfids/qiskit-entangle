@@ -14,9 +14,10 @@ from qiskit import QuantumCircuit
 class GraphState:
     """
     Construct a graph state circuit over every physical edge in the device 
-    with batch tomography circuits
+    and perform quantum state tomography over each edge qubit pair
     """
     def __init__(self, backend):
+        # Initialise of input backend
         self.backend = backend
         self.nqubits = len(backend.properties().qubits)
         self.edges = self.get_edges()
@@ -32,12 +33,13 @@ class GraphState:
         element tuple corresponding to qubit pairs
         """
         edges = []
-        edges_matrix = np.array([], dtype=np.int16).reshape(0,2)
+        edges_matrix = np.array([], dtype=np.int32).reshape(0,2)
         # Iterate over possible cnot connections to construct an array of edges
         for gate in self.backend.properties().gates:
             if gate.gate == 'cx':
                 if gate.qubits[0] < gate.qubits[1]:
                     edges_matrix = np.vstack([edges_matrix, gate.qubits])
+        # Sort 2d edges matrix by first qubit value then second qubit value
         edges_matrix = edges_matrix[np.lexsort((edges_matrix[:,1], edges_matrix[:,0]))]
         # Convert 2d numpy array to Python list of tuples
         for i in range(len(edges_matrix)):
@@ -46,8 +48,8 @@ class GraphState:
     
     def get_tomography_targets(self):
         """
-        Get a dictionary of tomography targets with target edges as keys and
-        neighbouring edges as values
+        Get a dictionary of tomography targets, where keys are target edges and
+        values are neighbouring edges
         """
         tomography_targets = {}
         # Iterate over every edge
@@ -89,7 +91,7 @@ class GraphState:
 
     def gen_graphstate_circuit(self):
         """
-        Generate a graph state circuit for the whole device with qiskit
+        Generate a graph state circuit over every physical edge
         """
         circuit = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edges.copy()
