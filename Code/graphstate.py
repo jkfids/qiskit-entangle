@@ -13,8 +13,8 @@ from qiskit import QuantumCircuit
 
 class GraphState:
     """
-    Construct a graph state circuit over the whole device and perform quantum
-    state tomography over each edge pair bell state
+    Construct a graph state circuit over every physical edge in the device 
+    with batch tomography circuits
     """
     def __init__(self, backend):
         self.backend = backend
@@ -24,7 +24,7 @@ class GraphState:
         self.tomography_targets = self.get_tomography_targets()
         self.tomography_batches = self.get_tomography_batches()
         self.nbatches = len(self.tomography_batches)
-        self.circuit = self.gen_circuit()
+        self.circuit = self.gen_graphstate_circuit()
         
     def get_edges(self):
         """
@@ -50,10 +50,12 @@ class GraphState:
         neighbouring edges as values
         """
         tomography_targets = {}
+        # Iterate over every edge
         for edge in self.edges:
             other_edges = self.edges.copy()
             other_edges.remove(edge)
             connected_edges = []
+            # Iterate over all other edges
             for edgej in other_edges:
                 if np.any(np.isin(edge, edgej)):
                     connected_edges.append(edgej)
@@ -63,7 +65,7 @@ class GraphState:
     def get_tomography_batches(self):
         """
         Get a dictionary of tomography batches, where keys are batch numbers
-        and values are a list of target edges
+        and values are lists of target edges
         """
         batches = {}
         unbatched_edges = self.edges.copy()
@@ -85,9 +87,9 @@ class GraphState:
             i += 1
         return batches
 
-    def gen_circuit(self):
+    def gen_graphstate_circuit(self):
         """
-        Generate a qiskit graph state circuit for the whole device
+        Generate a graph state circuit for the whole device with qiskit
         """
         circuit = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edges.copy()
@@ -95,7 +97,7 @@ class GraphState:
         circuit.h(list(range(self.nqubits)))
         # Connect every edge with cz gates
         while unconnected_edges:
-            connected_qubits = [] # Qubits connected in the same time step
+            connected_qubits = [] # Qubits already connected in the current time step
             remove = []
             for edge in unconnected_edges:
                 if np.any(np.isin(edge, connected_qubits)) == False:
