@@ -19,13 +19,14 @@ class GraphState:
     def __init__(self, backend):
         # Initialise of input backend
         self.backend = backend
+        self.device_name = backend.properties().backend_name
         self.nqubits = len(backend.properties().qubits)
         self.edges = self.get_edges()
         self.nedges = len(self.edges)
         self.tomography_targets = self.get_tomography_targets()
         self.tomography_batches = self.get_tomography_batches()
         self.nbatches = len(self.tomography_batches)
-        self.circuit = self.gen_graphstate_circuit()
+        self.graphstate_circuit = self.gen_graphstate_circuit()
         
     def get_edges(self):
         """
