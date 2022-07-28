@@ -19,15 +19,19 @@ def startup(check=False, token=token, hub='ibm-q-melbourne', group=None, project
     """Start up session"""
     if IBMQ.active_account() is None:
         IBMQ.enable_account(token)
-        print('Provider:', hub)
+        print("Account enabled")
+    else:
+        print("Account already enabled")
+    
+    provider = IBMQ.get_provider(hub)
+    print('Provider:', hub)
+    
     if check:
         check_provider(hub)
             
-    provider = IBMQ.get_provider(hub)
-            
     return provider
         
-def check_provider(hub):
+def check_provider(hub='ibm-q-melbourne'):
     """Check list of providers with queue size and qubit count for input hub"""
     provider = IBMQ.get_provider(hub)
     
