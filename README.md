@@ -1,2 +1,2 @@
-# qiskit-fidelity
+# qiskit-entangle
  
