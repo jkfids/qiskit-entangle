@@ -10,6 +10,7 @@ from numpy import array, kron
 
 # Qiskit libraries
 from qiskit import IBMQ
+import mthree
 
 token = '509707245c44e538cd6e320690c2caae9aec5b915172ae11ebbd74591772f59dc7e62e17c94d284d3d802e403476e4e0da9a422fca2d25c5f11ebc2f3e719da4'
 
@@ -68,6 +69,24 @@ def pauli_n(basis_str):
     except: pass # Single basis case
     
     return M 
+
+# Run and load mthree calibrations
+def run_cal(backend, filename=None):
+    mit = mthree.M3Mitigation(backend)
+    mit.cals_from_system(list(range(len(backend.properties().qubits))), shots=8192)
+    if filename is None:
+        filename = f'calibrations/{backend.name()}_cal.json'
+    mit.cals_to_file(filename)
+    
+    return mit
+    
+def load_cal(backend=None, filename=None):
+    mit = mthree.M3Mitigation()
+    if filename is None:
+        filename = f'calibrations/{backend.name()}_cal.json'
+    mit.cals_from_file(filename)
+    
+    return mit
       
 
     

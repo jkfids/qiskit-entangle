@@ -42,8 +42,8 @@ class GraphState(EntangleBase):
         """
         super().__init__(backend)  # Inherent from parent class
 
-        self.adj_qubits = self.__get_adjs()
-        self.circuit = self.__gen_graphstate_circuit()
+        self.adj_qubits, self.adj_edges = self.__get_adjs()
+        self.circuit = self.gen_graphstate_circuit()
 
         self.batches = None
         self.group_list = None
@@ -65,27 +65,27 @@ class GraphState(EntangleBase):
 
         """
 
-        # adj_edges = {}
+        adj_edges = {}
         adj_qubits = {}
         # Iterate over every edge
         for edge in self.edge_list:
             other_edges = self.edge_list.copy()
             other_edges.remove(edge)
-            #connected_edges = []
+            connected_edges = []
             connected_qubits = []
             # Iterate over all other edges
             for edgej in other_edges:
                 if np.any(np.isin(edge, edgej)):
-                    # connected_edges.append(edgej)
+                    connected_edges.append(edgej)
                     for qubit in edgej:
                         if qubit not in edge:
                             connected_qubits.append(qubit)
-            #adj_edges[edge] = connected_edges
+            adj_edges[edge] = connected_edges
             adj_qubits[edge] = connected_qubits
 
-        return adj_qubits
+        return adj_qubits, adj_edges
 
-    def __gen_graphstate_circuit(self):
+    def gen_graphstate_circuit(self, return_depths=False):
         """
         Generate a native-graph state circuit over every physical edge
 
@@ -93,11 +93,13 @@ class GraphState(EntangleBase):
 
         circ = QuantumCircuit(self.nqubits)
         unconnected_edges = self.edge_list.copy()
+        depths = []
         # Apply Hadamard gates to every qubit
         circ.h(list(range(self.nqubits)))
         # Connect every edge with cz gates
         while unconnected_edges:
             connected_qubits = []  # Qubits already connected in the current time step
+            connected_edges = []
             remove = []
             for edge in unconnected_edges:
                 if np.any(np.isin(edge, connected_qubits)) == False:
@@ -105,8 +107,12 @@ class GraphState(EntangleBase):
                     connected_qubits.extend(edge)
                     remove.append(edge)
             # Remove connected edges from unconnected edges list
+            depths.append(remove)
             for edge in remove:
                 unconnected_edges.remove(edge)
+                
+        if return_depths is True:
+            return depths
 
         return circ
 
@@ -313,7 +319,9 @@ class GraphState(EntangleBase):
             job = execute(circ_list, backend=self.backend, shots=shots)
         elif sim == "ideal":
             backend = Aer.get_backend('aer_simulator')
-            job = execute(circ_list, backend=backend, shots=shots)
+            job = execute(circ_list, backend=backend, 
+                          initial_layout=list(range(self.nqubits)),
+                          shots=shots)
         elif sim == "device":
             # Obtain device and noise model parameters
             noise_model = NoiseModel.from_backend(self.backend)
@@ -584,15 +592,14 @@ class GraphState(EntangleBase):
         s_dict = {basis: 0. for basis in ext_basis_list}
         s_dict['II'] = 1.  # S for 'II' always equals 1
 
-        # Calculate s in each (extended) basis
+        # Calculate s in each experimental basis
         for basis, pvec in pvecs.items():
             # s for basis not containing I
             s_dict[basis] = pvec[0] - pvec[1] - pvec[2] + pvec[3]
-            # s for basis 'IX' and 'XI' can be derived from 'XX' etc..
-            if basis[0] == basis[1]:
-                s_dict['I' + basis[1]] = pvec[0] - pvec[1] + pvec[2] - pvec[3]
-                s_dict[basis[0] + 'I'] = pvec[0] + pvec[1] - pvec[2] - pvec[3]
-
+            # s for basis 'IX' and 'XI'
+            s_dict['I' + basis[1]] += (pvec[0] - pvec[1] + pvec[2] - pvec[3])/3
+            s_dict[basis[0] + 'I'] += (pvec[0] + pvec[1] - pvec[2] - pvec[3])/3
+            
         # Weighted sum of basis matrices
         for basis, s in s_dict.items():
             rho += 0.25*s*pauli_n(basis)
@@ -637,17 +644,6 @@ class GraphState(EntangleBase):
 
         return rho_physical
 
-    @staticmethod
-    def ptrans(rho):
-        """Obtain the partial transpose of a 4x4 array (A kron B) w.r.t B"""
-
-        rho_pt = np.zeros(rho.shape, dtype=complex)
-        for i in range(0, 4, 2):
-            for j in range(0, 4, 2):
-                rho_pt[i:i+2, j:j+2] = rho[i:i+2, j:j+2].transpose()
-
-        return rho_pt
-
 
 def calc_negativities(rho_dict, mode='all'):
     """
@@ -660,6 +656,7 @@ def calc_negativities(rho_dict, mode='all'):
     n_all_list = []  # Negativities for each bin per experiment
     n_mean_list = []  # Mean negativity between bins per experiment
     n_max_list = []  # Max negativity between bins per experiment
+    n_min_list = []
 
     if isinstance(rho_dict, dict):
         rho_dict = [rho_dict]
@@ -670,6 +667,7 @@ def calc_negativities(rho_dict, mode='all'):
         n_all = {edge: {} for edge in rho_dict[i].keys()}
         n_mean = {}
         n_max = {}
+        n_min = {}
 
         for edge, bns in rho_dict[i].items():
             n_sum = 0.
@@ -684,10 +682,12 @@ def calc_negativities(rho_dict, mode='all'):
 
             n_mean[edge] = n_sum/len(bns)
             n_max[edge] = max(n_all[edge].values())
+            n_min[edge] = min(n_all[edge].values())
 
         n_all_list.append(n_all)
         n_mean_list.append(n_mean)
         n_max_list.append(n_max)
+        n_min_list.append(n_min)
 
     # Single experiment
     if len(rho_dict) == 1:
@@ -697,6 +697,8 @@ def calc_negativities(rho_dict, mode='all'):
             return n_mean
         elif mode == 'max':
             return n_max
+        elif mode == 'min':
+            return n_min
 
     # Multiple experiments
     if mode == 'all':
@@ -705,6 +707,8 @@ def calc_negativities(rho_dict, mode='all'):
         return n_mean_list
     elif mode == 'max':
         return n_max_list
+    elif mode == 'min':
+        return n_min_list
 
     return None
 
@@ -716,11 +720,21 @@ def calc_n(rho):
 
     """
 
-    rho_pt = GraphState.ptrans(rho)
+    rho_pt = ptrans(rho)
     w, _ = la.eig(rho_pt)
     n = np.sum(w[w < 0])
 
     return abs(n)
+
+def ptrans(rho):
+    """Obtain the partial transpose of a 4x4 array (A kron B) w.r.t B"""
+
+    rho_pt = np.zeros(rho.shape, dtype=complex)
+    for i in range(0, 4, 2):
+        for j in range(0, 4, 2):
+            rho_pt[i:i+2, j:j+2] = rho[i:i+2, j:j+2].transpose()
+
+    return rho_pt
 
 
 def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8)):
@@ -762,9 +776,11 @@ def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8))
     Y0err = Y0err[idx]
 
     # Plot
-    ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', label='No QREM')
+    ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', 
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.4f})')
     try:
-        ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', label='QREM')
+        ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', 
+                    label=f'QREM (Mean negativity: {np.mean(Y1):.4f})')
     except:
         pass
 
@@ -776,29 +792,41 @@ def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8))
 
     ax.set_xlabel("Qubit Pairs")
     ax.set_ylabel("Negativity")
-    ax.set_title(f"Native-graph state negativities ({backend.name()})")
+    #ax.set_title(f"Native-graph state negativities ({backend.name()})")
+    ax.set_title(backend.name())
 
     return fig
 
 
-def plot_cxerr_corr(properties, n_mean, figsize=(6.4, 4.8)):
+def plot_cxerr_corr(properties, adj_edges, n_mean, inc_adj=True, figsize=(6.4, 4.8)):
     """Plot negativity vs. CNOT error"""
 
     # Figure
-    fig, ax = plt.subplots(figsize=figsize)
+    #fig, ax = plt.subplots(figsize=figsize)
 
     edges = n_mean.keys()
-
-    X = np.fromiter((properties.gate_error('cx', edge)
-                     for edge in edges), float)
+    
+    if inc_adj is True:
+        X = []
+        for edge in edges:
+            targ_err = [properties.gate_error('cx', edge)]
+            adj_errs = [properties.gate_error('cx', adj_edge) 
+                       for adj_edge in adj_edges[edge]
+                       if adj_edge in edges]
+            err = np.mean(targ_err + adj_errs)
+            X.append(err)
+        X = np.array(X)
+    else:
+        X = np.fromiter((properties.gate_error('cx', edge)
+                         for edge in edges), float)
 
     Y = np.fromiter((n_mean.values()), float)
 
-    ax.scatter(X, Y)
-    ax.set_xlabel("CNOT Error")
-    ax.set_ylabel("Negativity")
+    #ax.scatter(X, Y)
+    #ax.set_xlabel("CNOT Error")
+    #ax.set_ylabel("Negativity")
 
-    return fig
+    return X, Y
 
 
 def calc_n_mean(n_list):
