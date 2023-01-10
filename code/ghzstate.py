@@ -180,7 +180,7 @@ class GHZState(EntangleBase):
 
         return cx_instr, initial_layout, depth, terror_dict
 
-    def gen_fid_circuits(self, delays=[0], dynamic_decoupling=False, pulses=4):
+    def gen_fid_circuits(self, delays=[0], dynamic_decoupling=False, pi_pulse=True, pulses=4):
 
         self.delays = delays
         try:
@@ -215,14 +215,16 @@ class GHZState(EntangleBase):
             # Circuit to measure coherence
             mqc_base = ghz_prep.copy()
             if t == 0:  # For 0 delay
-                mqc_base.x(range(self.ghz_size))
+                if pi_pulse is True:
+                    mqc_base.x(range(self.ghz_size))
             else:
                 if dynamic_decoupling is True:
                     mqc_base.compose(self.gen_circ_dd(t, pulses), inplace=True)
                 else:
                     thalf = self.format_delays(t/2, unit='dt')
                     mqc_base.delay(thalf)
-                    mqc_base.x(range(self.ghz_size))
+                    if pi_pulse is True:
+                        mqc_base.x(range(self.ghz_size))
                     mqc_base.delay(thalf)
 
             for j, phi in enumerate(phi_list):
@@ -239,7 +241,7 @@ class GHZState(EntangleBase):
 
         return circ_list
 
-    def gen_circ_dd(self, t, pulses):
+    def gen_circ_dd(self, t, pulses, mode='X q'):
 
         circ_dd = QuantumCircuit(self.ghz_size)
 
