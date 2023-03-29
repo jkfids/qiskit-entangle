@@ -9,6 +9,7 @@ Created on Mon May  9 16:01:06 2022
 import numpy as np
 import numpy.linalg as la
 from matplotlib import pyplot as plt
+import networkx as nx
 
 # Qiskit libraries
 from qiskit import QuantumCircuit, ClassicalRegister, Aer, execute
@@ -99,7 +100,7 @@ class GraphState(EntangleBase):
         # Connect every edge with cz gates
         while unconnected_edges:
             connected_qubits = []  # Qubits already connected in the current time step
-            connected_edges = []
+            #connected_edges = []
             remove = []
             for edge in unconnected_edges:
                 if np.any(np.isin(edge, connected_qubits)) == False:
@@ -116,15 +117,15 @@ class GraphState(EntangleBase):
 
         return circ
 
-    def run_qst(self, reps=1, shots=4096, qrem=False, sim=None, output='default',
-                execute_only=False):
+    def run_qst(self, reps=1, shots=4096, delay=None, dd=None, qrem=False, 
+                sim=None, output='default', execute_only=False):
         """
         Run entire QST program to obtain qubit pair density matrices with
         option to only send job request
 
         """
 
-        self.gen_qst_circuits()
+        self.gen_qst_circuits(delay, dd)
         job = self.run_qst_circuits(reps, shots, qrem, sim)
 
         if execute_only is True:  # If only executing job
@@ -202,7 +203,7 @@ class GraphState(EntangleBase):
 
         return batches
 
-    def gen_qst_circuits(self):
+    def gen_qst_circuits(self, delay=None, dd=None, pulserate=0):
         """
         Generates (parallelised) quantum state tomography circuits
 
@@ -214,9 +215,34 @@ class GraphState(EntangleBase):
 
         circuits = {}  # Dictionary of groups of circuits where batches are keys
         name_list = []  # List of circuit names
-
+        
         graphstate = self.circuit.copy()
         graphstate.barrier()
+        
+        if delay is not None:
+            fdelay = self.format_delays(delay)
+            if dd is None:
+                graphstate.delay(fdelay)
+            elif dd == 'hahn':
+                tdelay = fdelay - 2*self.tx
+                fqdelay = self.format_delays(tdelay/4, unit='dt')
+                graphstate.delay(fqdelay)
+                graphstate.x(range(self.nqubits))
+                graphstate.delay(2*fqdelay)
+                graphstate.x(range(self.nqubits))
+                graphstate.delay(fqdelay)
+            elif dd == 'pdd':
+                pulses = int(0.5*pulserate*delay)/2
+                dt = self.format_delays((fdelay - pulses*self.tx)/pulses, unit='dt')
+                padding = self.format_delays((fdelay - dt*pulses)/2, unit='dt')
+                
+                graphstate.delay(padding)
+                graphstate.x(range(self.nqubits))
+                for i in range(pulses - 1):
+                    graphstate.delay(dt)
+                    graphstate.x(range(self.nqubits))
+                graphstate.delay(padding)
+        
 
         for batch, groups in self.batches.items():
 
@@ -643,6 +669,35 @@ class GraphState(EntangleBase):
                 np.outer(eigvec[:, j], eigvec[:, j].conjugate())
 
         return rho_physical
+    
+    def format_delays(self, delays, unit='us'):
+
+        try:
+            # For array of times
+            n = len(delays)
+        except TypeError:
+            n = None
+
+        # Convert delays based on input unit
+        dt = self.backend.configuration().dt
+        if unit == 'ns':
+            scale = 1e-9/dt
+        elif unit == 'us':
+            scale = 1e-6/dt
+        elif unit == 'dt':
+            scale = 1
+
+        # Qiskit only accepts multiples of 16*dt
+        if n is None:
+            # For single time
+            delays_new = np.floor(delays*scale/16)*16
+        else:
+            # For array of times
+            delays_new = np.zeros(n)
+            for i, t in enumerate(delays):
+                delays_new[i] = np.round(t*scale/16)*16
+
+        return delays_new
 
 
 def calc_negativities(rho_dict, mode='all'):
@@ -737,98 +792,6 @@ def ptrans(rho):
     return rho_pt
 
 
-def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8)):
-    """
-    Plot average negativity across multiple experiments with error bars as std
-
-    """
-
-    # Figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Extract the mean negativity and its standard deviation
-    edges = n_list[0].keys()
-    n_mean, n_std = calc_n_mean(n_list)
-
-    # Convert into array for plotting
-    X = np.array([f'{edge[0]}-{edge[1]}' for edge in edges])
-    Y0 = np.fromiter(n_mean.values(), float)
-    Y0err = np.fromiter(n_std.values(), float)
-
-    # If mitigated results are included
-    try:
-        nmit_mean, nmit_std = calc_n_mean(nmit_list)
-
-        Y1 = np.fromiter(nmit_mean.values(), float)
-        Y1err = np.fromiter(nmit_std.values(), float)
-        # Order in increasing minimum negativity (QREM)
-        Y1min = Y1 - Y1err
-        idx = Y1min.argsort()
-        Y1 = Y1[idx]
-        Y1err = Y1err[idx]
-    except:
-        # Order in increasing minimum negativity (No QREM)
-        Y0min = Y0 - Y0err
-        idx = Y0min.argsort()
-
-    X = X[idx]
-    Y0 = Y0[idx]
-    Y0err = Y0err[idx]
-
-    # Plot
-    ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', 
-                label=f'No QREM (Mean negativity: {np.mean(Y0):.4f})')
-    try:
-        ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', 
-                    label=f'QREM (Mean negativity: {np.mean(Y1):.4f})')
-    except:
-        pass
-
-    # Fig params
-    ax.set_yticks(np.arange(0, 0.55, 0.05))
-    ax.tick_params(axis='x', labelrotation=90)
-    ax.grid()
-    ax.legend()
-
-    ax.set_xlabel("Qubit Pairs")
-    ax.set_ylabel("Negativity")
-    #ax.set_title(f"Native-graph state negativities ({backend.name()})")
-    ax.set_title(backend.name())
-
-    return fig
-
-
-def plot_cxerr_corr(properties, adj_edges, n_mean, inc_adj=True, figsize=(6.4, 4.8)):
-    """Plot negativity vs. CNOT error"""
-
-    # Figure
-    #fig, ax = plt.subplots(figsize=figsize)
-
-    edges = n_mean.keys()
-    
-    if inc_adj is True:
-        X = []
-        for edge in edges:
-            targ_err = [properties.gate_error('cx', edge)]
-            adj_errs = [properties.gate_error('cx', adj_edge) 
-                       for adj_edge in adj_edges[edge]
-                       if adj_edge in edges]
-            err = np.mean(targ_err + adj_errs)
-            X.append(err)
-        X = np.array(X)
-    else:
-        X = np.fromiter((properties.gate_error('cx', edge)
-                         for edge in edges), float)
-
-    Y = np.fromiter((n_mean.values()), float)
-
-    #ax.scatter(X, Y)
-    #ax.set_xlabel("CNOT Error")
-    #ax.set_ylabel("Negativity")
-
-    return X, Y
-
-
 def calc_n_mean(n_list):
     """Calculate mean negativity dict from lists of negativity dicts"""
 
@@ -842,42 +805,67 @@ def calc_n_mean(n_list):
     return n_mean, n_std
 
 
-def plot_device_nbatches(provider, size=(6.4, 4.8)):
-    """Plot the number of QST patches for each available device"""
 
-    # Figure
-    fig, ax = plt.subplots(figsize=size)
+def get_negativity_info(n_list, nmit_list):
+    
+    n_mean_dict, _ = calc_n_mean(n_list)
+    n_mean = np.mean(list(n_mean_dict.values()))
+    std = np.std(list(n_mean_dict.values()))
 
-    X = []  # Name
-    Y = []  # No. of batches
-    N = []  # No. of qubits
+    nmit_mean_dict, _ = calc_n_mean(nmit_list)
+    nmit_mean = np.mean(list(nmit_mean_dict.values()))
+    std_mit = np.std(list(nmit_mean_dict.values()))
+    
+    n5 = get_largest_connected(n_mean_dict, threshold=0.025)
+    n50 = get_largest_connected(n_mean_dict, threshold=0.25)
+    n75 = get_largest_connected(n_mean_dict, threshold=0.75*0.5)
+    n90 = get_largest_connected(n_mean_dict, threshold=0.9*0.5)
+    
+    nmit5 = get_largest_connected(nmit_mean_dict, threshold=0.025)
+    nmit50 = get_largest_connected(nmit_mean_dict, threshold=0.25)
+    nmit75 = get_largest_connected(nmit_mean_dict, threshold=0.75*0.5)
+    nmit90 = get_largest_connected(nmit_mean_dict, threshold=0.9*0.5)
+    
+    info_dict = {'Mean negativity': n_mean,
+                 'std': std,
+                'Mean negativity (mit)': nmit_mean,
+                 'std (mit)': std_mit,
+                'Connected N>5%': len(n5),
+                'Connected N>50%': len(n50),
+                'Connected N>75%': len(n75),
+                'Connected N>90%': len(n90),
+                'Connected N>5% (mit)': len(nmit5),
+                'Connected N>50% (mit)': len(nmit50),
+                'Connected N>75% (mit)': len(nmit75),
+                'Connected N>90% (mit)': len(nmit90)}
 
-    for backend in provider.backends():
-        try:
-            properties = backend.properties()
-            nqubits = len(properties.qubits)
-            name = properties.backend_name
+    return info_dict
 
-            nbatches = len(GraphState(backend).gen_batches())
 
-            X.append(name + f', {nqubits}')
-            Y.append(nbatches)
-            N.append(nqubits)
+def get_largest_connected(n_dict, threshold=0.25):
+    
+    edges = filter_edges(n_dict, threshold)
+    G = nx.Graph()
+    G.add_edges_from(edges)
+    try:
+        largest = max(nx.connected_components(G), key=len)
+    except:
+        largest = {}
+    
+    return largest
 
-        except:
-            pass
+    
+def filter_edges(n_dict, threshold=0.25/2):
+    return [key for key, value in n_dict.items() if value >= threshold]
 
-    # Convert to numpy arrays for sorting
-    X = np.array(X)
-    Y = np.array(Y)
-    N = np.array(N)
-    # Sort by number of qubits
-    idx = N.argsort()
-    X = X[idx]
-    Y = Y[idx]
 
-    # Plot
-    ax.scatter(X, Y)
-    ax.tick_params(axis='x', labelrotation=90)
+def get_mean_cnot(graphstate, properties):
+    err_array = np.zeros(len(graphstate.edge_list))
+    for i, edge in enumerate(graphstate.edge_list):
+        err = properties.gate_error('cx', edge)
+        if err < 0.9:
+            err_array[i] = err
+        #print(edge, err_array[i])
+    
+    return np.mean(err_array), np.std(err_array)
 
-    return fig

@@ -7,6 +7,7 @@ Created on Thu May 12 00:11:10 2022
 
 # Standard libraries
 import networkx as nx
+from qiskit.transpiler import InstructionDurations
 
 
 class EntangleBase:
@@ -20,6 +21,9 @@ class EntangleBase:
         self.graph, self.connections, self.edge_params = self.gen_graph()
         self.edge_list = sorted(list(self.edge_params.keys()), key=lambda q: (q[0], q[1]))
         self.nedges = len(self.edge_params)
+        
+        durations = InstructionDurations.from_backend(backend)
+        self.tx = durations.get('x', 0)
     
     def gen_graph(self):
         """
@@ -38,6 +42,17 @@ class EntangleBase:
                 if q0 < q1:
                     graph.add_edge(q0, q1, weight=gate.parameters[0].value)
                     edges[q0, q1] = gate.parameters[0].value
+            if gate.gate == 'ecr':
+                q0 = gate.qubits[0]
+                q1 = gate.qubits[1]
+                connections[q0].append(q1)
+                connections[q1].append(q0)
+                if q0 < q1:
+                    graph.add_edge(q0, q1, weight=gate.parameters[0].value)
+                    edges[q0, q1] = gate.parameters[0].value
+                if q1 < q0:
+                    graph.add_edge(q1, q0, weight=gate.parameters[0].value)
+                    edges[q1, q0] = gate.parameters[0].value
         # Sort adjacent qubit list in ascending order
         for q in connections:
             connections[q].sort()

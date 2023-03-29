@@ -35,8 +35,6 @@ class GHZState(EntangleBase):
 
         super().__init__(backend)
 
-        durations = InstructionDurations.from_backend(backend)
-        self.tx = durations.get('x', 0)
 
         self.ghz_circuit = None
         self.initial_layout = []
@@ -70,6 +68,25 @@ class GHZState(EntangleBase):
             return circ, initial_layout, terror_dict
 
         return circ, initial_layout
+    
+    def ghz_circ_from_instr(self, instr):
+        
+        initial_layout = list(dict.fromkeys([q for edge in instr for q in edge]))
+        nodes = len(initial_layout)
+        cx_instr = [(initial_layout.index(a), initial_layout.index(b)) for (a, b) in instr]
+        
+        # Construct circuit in Qiskit
+        circ = QuantumCircuit(nodes)
+        circ.h(0)
+        for edge in cx_instr:
+            circ.cx(*edge)
+        
+        self.ghz_circuit = circ
+        self.ghz_size = nodes
+        self.initial_layout = initial_layout
+        
+        return circ, initial_layout
+        
 
     def find_opt_source(self, nodes, error_key='cumcx'):
 
@@ -203,7 +220,8 @@ class GHZState(EntangleBase):
             # Circuit to measure population
             circ_pop = ghz_prep.copy(f'pop_t{i}')
             if t == 0:  # For 0 delay
-                pass
+                if pi_pulse is True:
+                    circ_pop.x(range(self.ghz_size))
             else:
                 if dynamic_decoupling is True:
                     circ_pop.compose(self.gen_circ_dd(t, pulses), inplace=True)
@@ -241,7 +259,7 @@ class GHZState(EntangleBase):
 
         return circ_list
 
-    def gen_circ_dd(self, t, pulses, mode='X q'):
+    def gen_circ_dd(self, t, pulses):
 
         circ_dd = QuantumCircuit(self.ghz_size)
 

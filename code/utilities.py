@@ -12,11 +12,18 @@ from numpy import array, kron
 from qiskit import IBMQ
 import mthree
 
-token = '509707245c44e538cd6e320690c2caae9aec5b915172ae11ebbd74591772f59dc7e62e17c94d284d3d802e403476e4e0da9a422fca2d25c5f11ebc2f3e719da4'
+#from token import tokenid
+from tokenid import tokenid 
+
+#try:
+#    import token.token
+#except:
+    #token = 
+#    pass
 
 # IBM Quantum account utils
 
-def startup(check=False, token=token, hub='ibm-q-melbourne', group=None, project=None):
+def startup(check=False, token=tokenid, hub='ibm-q-melbourne', group=None, project=None):
     """Start up session"""
     if IBMQ.active_account() is None:
         IBMQ.enable_account(token)
