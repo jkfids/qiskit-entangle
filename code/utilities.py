@@ -10,6 +10,7 @@ from numpy import array, kron
 
 # Qiskit libraries
 from qiskit import IBMQ
+from qiskit_ibm_provider import IBMProvider
 import mthree
 
 #from token import tokenid
@@ -23,16 +24,18 @@ from tokenid import tokenid
 
 # IBM Quantum account utils
 
+#def startup(check=False, token=tokenid, hub='ibm-q-melbourne', group=None, project=None):
+#    
+
 def startup(check=False, token=tokenid, hub='ibm-q-melbourne', group=None, project=None):
     """Start up session"""
-    if IBMQ.active_account() is None:
-        IBMQ.enable_account(token)
-        print("Account enabled")
-    else:
-        print("Account already enabled")
     
-    provider = IBMQ.get_provider(hub)
-    print('Provider:', hub)
+    try:
+        provider = IBMProvider()
+    except:
+        IBMProvider.save_account(token=tokenid)
+        provider = IBMProvider()
+    print("Account enabled")
     
     if check:
         check_provider(hub)
@@ -41,7 +44,7 @@ def startup(check=False, token=tokenid, hub='ibm-q-melbourne', group=None, proje
         
 def check_provider(hub='ibm-q-melbourne'):
     """Check list of providers with queue size and qubit count for input hub"""
-    provider = IBMQ.get_provider(hub)
+    provider = IBMProvider()
     
     for backend in provider.backends():
       try:
@@ -78,9 +81,9 @@ def pauli_n(basis_str):
     return M 
 
 # Run and load mthree calibrations
-def run_cal(backend, filename=None):
+def run_cal(backend, initial_layout, filename=None):
     mit = mthree.M3Mitigation(backend)
-    mit.cals_from_system(list(range(len(backend.properties().qubits))), shots=8192)
+    mit.cals_from_system(initial_layout, shots=8192)
     if filename is None:
         filename = f'calibrations/{backend.name()}_cal.json'
     mit.cals_to_file(filename)
@@ -94,6 +97,10 @@ def load_cal(backend=None, filename=None):
     mit.cals_from_file(filename)
     
     return mit
+
+def list_retrieve_jobs(job_ids):
+    for i, job_id in enumerate(job_ids):
+        print(f'job{i+1} = provider.backend.retrieve_job(\'{job_id}\')')
       
 
     

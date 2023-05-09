@@ -2,3 +2,9 @@
 *.pyc
 *checkpoint.ipynb
 *checkpoint.py
+code/tokenid.py
+code/calibrations/*
+code/output/*.png
+code/output/negativities/*.png
+
+

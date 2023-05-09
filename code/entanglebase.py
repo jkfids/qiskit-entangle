@@ -16,11 +16,24 @@ class EntangleBase:
     def __init__(self, backend):
         self.backend = backend
         
-        self.device_name = backend.properties().backend_name
-        self.nqubits = len(backend.properties().qubits)
+        properties = backend.properties()
+        
+        self.device_name = properties.backend_name
+        self.nqubits = len(properties.qubits)
+        self.qubits = list(range(self.nqubits))
         self.graph, self.connections, self.edge_params = self.gen_graph()
         self.edge_list = sorted(list(self.edge_params.keys()), key=lambda q: (q[0], q[1]))
         self.nedges = len(self.edge_params)
+        # If there are faulty qubits
+        properties = properties
+        faulty_qubits = properties.faulty_qubits()
+        faulty_gates = properties.faulty_gates()
+        faulty_edges = [tuple(gate.qubits) for gate in faulty_gates if len(gate.qubits) > 1
+                        ]
+        for q in faulty_qubits:
+            self.qubits.remove(q)
+        for edge in faulty_edges:
+            self.edge_list.remove(edge)
         
         durations = InstructionDurations.from_backend(backend)
         self.tx = durations.get('x', 0)

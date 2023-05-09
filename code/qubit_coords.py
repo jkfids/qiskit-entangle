@@ -257,3 +257,27 @@ qubit_coords127 = [
         [12, 13],
         [12, 14],
     ]
+
+qubit_coords433 = []
+
+even = [2, 6, 10, 14, 18, 22, 26]
+odd = [0, 4, 8, 12, 16, 20, 24]
+
+for i in range(26):
+    qubit_coords433.append([0, i])
+for i in range(1, 12):
+    #print(i)
+    if (i % 2) == 0:
+        for k in even:
+            qubit_coords433.append([i*2-1, k])
+    else:
+        for k in odd:
+            qubit_coords433.append([i*2-1, k])
+    for k in range(27):
+        qubit_coords433.append([i*2, k])
+        
+for k in even:
+    qubit_coords433.append([23, k])
+    
+for i in range(1, 27):
+    qubit_coords433.append([24, i])

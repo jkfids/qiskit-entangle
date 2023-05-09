@@ -18,7 +18,7 @@ from qubit_coords import qubit_coords127
 
 # GRAPH STATE
 
-def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8), idx=None, return_idx=False):
+def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8), idx=None, return_idx=False, print_n=True):
     """
     Plot average negativity across multiple experiments with error bars as std
 
@@ -68,24 +68,34 @@ def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8),
     Y0err = Y0err[idx]
 
     # Plot
-    ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', 
-                label=f'No QREM (Mean negativity: {np.mean(Y0):.4f})')
-    try:
-        ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', 
-                    label=f'QREM (Mean negativity: {np.mean(Y1):.4f})')
-    except:
-        pass
+    if print_n is True:
+        ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', 
+                    label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
+        try:
+            ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', 
+                        label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+        except:
+            pass
+    else:
+        ax.errorbar(X, Y0, yerr=Y0err, capsize=3, fmt='.', c='r', 
+                    label='No QREM')
+        try:
+            ax.errorbar(X, Y1, yerr=Y1err, capsize=3, fmt='.', c='b', 
+                        label='QREM')
+        except:
+            pass
 
     # Fig params
     ax.set_yticks(np.arange(0, 0.55, 0.05))
+    ax.set_ylim([-0.02, 0.52])
     ax.tick_params(axis='x', labelrotation=90)
     ax.grid()
     ax.legend()
 
     ax.set_xlabel("Qubit Pairs")
     ax.set_ylabel("Negativity")
-    #ax.set_title(f"Native-graph state negativities ({backend.name()})")
-    ax.set_title(backend.name())
+    #ax.set_title(f"Native-graph state negativities ({backend.name})")
+    #ax.set_title(backend.name)
     fig.set_tight_layout(True)
 
     if return_idx:
@@ -93,12 +103,17 @@ def plot_negativities_multi(backend, n_list, nmit_list=None, figsize=(6.4, 4.8),
     else:
         return fig
 
-def plot_negativities127(backend, n_list, nmit_list, figsize=(14, 9)):
+def plot_negativities127(backend, n_list, nmit_list, figsize=(14, 9), idx=None, return_idx=False):
     
     # Figure
     fig, (ax1, ax2) = plt.subplots(2, figsize=figsize)
     
     # Extract the mean negativity and its standard deviation
+    try:
+        n_list[0]
+    except:
+        n_list = [n_list]
+        nmit_list = [nmit_list]
     edges = n_list[0].keys()
     n_mean, n_std = calc_n_mean(n_list)
     nmit_mean, nmit_std = calc_n_mean(nmit_list)
@@ -113,7 +128,8 @@ def plot_negativities127(backend, n_list, nmit_list, figsize=(14, 9)):
     
     # Order in increasing minimum negativity (QREM)
     Y1min = Y1 - Y1err
-    idx = Y1min.argsort()
+    if idx is None:
+        idx = Y1min.argsort()
     Y1 = Y1[idx]
     Y1err = Y1err[idx]
     
@@ -124,19 +140,20 @@ def plot_negativities127(backend, n_list, nmit_list, figsize=(14, 9)):
     hp = int(len(X)/2)
     
     ax1.errorbar(X[:hp], Y0[:hp], yerr=Y0err[:hp], capsize=3, fmt='.', c='r', 
-                label=f'No QREM (Mean negativity: {np.mean(Y0):.4f})')
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
     
     ax1.errorbar(X[:hp], Y1[:hp], yerr=Y1err[:hp], capsize=3, fmt='.', c='b', 
-                label=f'QREM (Mean negativity: {np.mean(Y1):.4f})')
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
     
     ax2.errorbar(X[hp:], Y0[hp:], yerr=Y0err[hp:], capsize=3, fmt='.', c='r', 
-                label=f'No QREM (Mean negativity: {np.mean(Y0):.4f})')
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
     
     ax2.errorbar(X[hp:], Y1[hp:], yerr=Y1err[hp:], capsize=3, fmt='.', c='b', 
-                label=f'QREM (Mean negativity: {np.mean(Y1):.4f})')
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
     
     for ax in (ax1, ax2):
         ax.set_yticks(np.arange(0, 0.55, 0.05))
+        ax.set_ylim([-0.02, 0.52])
         ax.tick_params(axis='x', labelrotation=90)
         ax.grid()
         ax.set_ylabel("Negativity")
@@ -144,8 +161,89 @@ def plot_negativities127(backend, n_list, nmit_list, figsize=(14, 9)):
         
     ax1.legend()
     ax2.set_xlabel("Qubit Pairs")
-    ax1.set_title(backend.name())
+    #ax1.set_title(backend.name)
     fig.set_tight_layout(True)
+    
+    if return_idx is True:
+        fig = fig, idx
+    
+    return fig
+
+def plot_negativities433(backend, n_list, nmit_list, figsize=(14, 14), idx=None, return_idx=False):
+    
+    # Figure
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=figsize)
+    
+    # Extract the mean negativity and its standard deviation
+    try:
+        n_list[0]
+    except:
+        n_list = [n_list]
+        nmit_list = [nmit_list]
+    edges = n_list[0].keys()
+    n_mean, n_std = calc_n_mean(n_list)
+    nmit_mean, nmit_std = calc_n_mean(nmit_list)
+    
+    # Convert into array for plotting
+    X = np.array([f'{edge[0]}-{edge[1]}' for edge in edges])
+    Y0 = np.fromiter(n_mean.values(), float)
+    Y0err = np.fromiter(n_std.values(), float)
+    
+    Y1 = np.fromiter(nmit_mean.values(), float)
+    Y1err = np.fromiter(nmit_std.values(), float)
+    
+    # Order in increasing minimum negativity (QREM)
+    Y1min = Y1 - Y1err
+    if idx is None:
+        idx = Y1min.argsort()
+    Y1 = Y1[idx]
+    Y1err = Y1err[idx]
+    
+    X = X[idx]
+    Y0 = Y0[idx]
+    Y0err = Y0err[idx]
+    
+    qp = int(len(X)/4)
+    
+    ax1.errorbar(X[:qp], Y0[:qp], yerr=Y0err[:qp], capsize=3, fmt='.', c='r', 
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
+    
+    ax1.errorbar(X[:qp], Y1[:qp], yerr=Y1err[:qp], capsize=3, fmt='.', c='b', 
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+    
+    ax2.errorbar(X[qp:qp*2], Y0[qp:qp*2], yerr=Y0err[qp:qp*2], capsize=3, fmt='.', c='r', 
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
+    
+    ax2.errorbar(X[qp:qp*2], Y1[qp:qp*2], yerr=Y1err[qp:qp*2], capsize=3, fmt='.', c='b', 
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+    
+    ax3.errorbar(X[qp*2:qp*3], Y0[qp*2:qp*3], yerr=Y0err[qp*2:qp*3], capsize=3, fmt='.', c='r', 
+                label=f'No QREM (Mean negativity: {np.mean(Y0):.3f})')
+    
+    ax3.errorbar(X[qp*2:qp*3], Y1[qp*2:qp*3], yerr=Y1err[qp*2:qp*3], capsize=3, fmt='.', c='b', 
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+    
+    ax4.errorbar(X[qp*3:qp*4], Y1[qp*3:qp*4], yerr=Y1err[qp*3:qp*4], capsize=3, fmt='.', c='b', 
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+    
+    ax4.errorbar(X[qp*3:qp*4], Y1[qp*3:qp*4], yerr=Y1err[qp*3:qp*4], capsize=3, fmt='.', c='b', 
+                label=f'QREM (Mean negativity: {np.mean(Y1):.3f})')
+    
+    for ax in (ax1, ax2, ax3, ax4):
+        ax.set_yticks(np.arange(0, 0.55, 0.05))
+        ax.set_ylim([-0.02, 0.52])
+        ax.tick_params(axis='x', labelrotation=90)
+        ax.grid()
+        ax.set_ylabel("Negativity")
+        ax.margins(0.025, 0.05)
+        
+    ax1.legend()
+    ax4.set_xlabel("Qubit Pairs")
+    #ax1.set_title(backend.name)
+    fig.set_tight_layout(True)
+    
+    if return_idx is True:
+        fig = fig, idx
     
     return fig
 
@@ -161,7 +259,7 @@ def plot_nmap127(graphstate, n_list):
     edges = filter_edges(n_mean, threshold=0.025)
     G = nx.Graph()
     G.add_edges_from(edges)
-    unconnected = list(set(range(127)) - list(nx.connected_components(G))[0])
+    unconnected = list(set(range(nqubits)) - list(nx.connected_components(G))[0])
     
     qubit_n = np.zeros(nqubits)
     qubit_color = []
@@ -187,7 +285,7 @@ def plot_nmap127(graphstate, n_list):
     
     norm = mpl.colors.Normalize(vmin=0, vmax=0.5)
 
-    ax = fig.get_axes()[0]
+    #ax = fig.get_axes()[0]
     cax = fig.add_axes([0.9, 0.2, 0.015, 0.605])
     
     im = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)

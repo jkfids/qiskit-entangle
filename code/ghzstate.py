@@ -42,17 +42,17 @@ class GHZState(EntangleBase):
 
         self.shots = None
 
-    def gen_ghz_circuit(self, nodes, source=None, output_error=False):
+    def gen_ghz_circuit(self, nodes, source=None, error_key=None, output_error=False):
 
         circ = QuantumCircuit(nodes)
 
         # If source is None
         if source is None:
-            source, cx_instr, initial_layout, depth, terror_dict = self.find_opt_source(
-                nodes)
+            source, cx_instr, initial_layout, depth, error_dict = self.find_opt_source(
+                nodes, error_key)
         # If source qubit is specified
         else:
-            cx_instr, initial_layout, depth, terror_dict = self.gen_circ_instr(
+            cx_instr, initial_layout, depth, error_dict = self.gen_circ_instr2(
                 nodes, source)
 
         # Construct circuit in Qiskit
@@ -65,15 +65,16 @@ class GHZState(EntangleBase):
         self.initial_layout = initial_layout
 
         if output_error is True:
-            return circ, initial_layout, terror_dict
-
-        return circ, initial_layout
+            output = circ, initial_layout, error_dict
+        else:
+            output = circ, initial_layout
+            
+        return output
     
     def ghz_circ_from_instr(self, instr):
-        
-        initial_layout = list(dict.fromkeys([q for edge in instr for q in edge]))
+
+        cx_instr, initial_layout = instr_to_cx_instr(instr)
         nodes = len(initial_layout)
-        cx_instr = [(initial_layout.index(a), initial_layout.index(b)) for (a, b) in instr]
         
         # Construct circuit in Qiskit
         circ = QuantumCircuit(nodes)
@@ -97,8 +98,14 @@ class GHZState(EntangleBase):
 
         for q in range(self.nqubits):
             instr, layout, depth, terror_dict = self.gen_circ_instr(nodes, q)
+            if error_key is None:
+                if depth < min_depth:
+                    source = q
+                    cx_instr = instr
+                    initial_layout = layout
+                    min_depth = depth
             # If CNOT depth is less than or equal to
-            if depth <= min_depth:
+            elif depth <= min_depth:
                 # If total error is less than
                 if terror_dict[error_key] < min_terror or depth < min_depth:
                     source = q
@@ -109,7 +116,7 @@ class GHZState(EntangleBase):
 
         return source, cx_instr, initial_layout, min_depth, terror_dict
 
-    def gen_circ_instr(self, nodes, source, mapped=False):
+    def gen_circ_instr(self, nodes, source, return_map=False):
         """Modified Dijkstra's algorithm"""
 
         terror_dict = {'cumcx': 0,
@@ -175,9 +182,8 @@ class GHZState(EntangleBase):
                         length[v_prev] = unvisited[v_prev] = next_depth[min(connected, key=next_depth.get)]
             except: pass
 
-        cx_instr = []
         
-        if mapped is True:
+        if return_map is True:
             qubits = []
             edges = []
             depths = []
@@ -186,16 +192,91 @@ class GHZState(EntangleBase):
                 edges.append(path[q][-2:])
                 depths.append(length[q])
                 
-            return qubits, edges, depths
-                
+            output = qubits, edges, depths
+        else:
+            cx_instr = []
+            for q in visited[1:]:
+                c, t = path[q][-2:]
+                cx_instr.append((visited.index(c), visited.index(t)))
+            initial_layout = visited
+            depth = length[u]   
+            
+            output = cx_instr, initial_layout, depth, terror_dict
+            
+        return output
+    
+    def gen_circ_instr2(self, nodes, source, return_map=False):
         
-        for q in visited[1:]:
-            c, t = path[q][-2:]
-            cx_instr.append((visited.index(c), visited.index(t)))
-        initial_layout = visited
-        depth = length[u]   
-
-        return cx_instr, initial_layout, depth, terror_dict
+        error_dict = {'cx': 0,
+                      't1': 0,
+                      't2': 0}
+        
+        depth = {q: self.nqubits for q in range(self.nqubits)} # cx depth to connect qubit in current circuit
+        ndepth = {}
+        path = {q: [] for q in range(self.nqubits)}
+        length = {q: self.nqubits for q in range(self.nqubits)} # length of path
+        
+        
+        depth[source] = 0
+        path[source] = [source]
+        length[source] = 0
+        
+        visited = []
+        unvisited = depth.copy()
+        
+        for i in range(nodes):
+            dmin = min(unvisited.values())
+            u_dmin = [key for key, value in unvisited.items() if value == dmin]
+            u = min(u_dmin, key=length.get)
+           
+            ndepth[u] = depth[u] + 1
+            visited.append(u)
+            del unvisited[u]
+            # Update error dict
+            #error_dict['cx'] += error[u]
+            #error_dict['t1'] += self.backend.properties().t1(u)
+            #error_dict['t2'] += self.backend.properties().t2(u)
+            
+            for v in self.connections[u]:
+                alt = depth[u] + 1
+                if alt < depth[v]:
+                    unvisited[v] = depth[v] = alt
+                    path[v] = path[u] + [v]
+                    length[v] = length[u] + 1
+            
+            try:
+                u_prev = path[u][-2]
+                ndepth[u_prev] = depth[u] + 1
+                #print(next_depth)
+                
+                for v_prev in self.connections[u_prev]:
+                    if v_prev in unvisited:
+                        connected = set(self.connections[v_prev]) - set(unvisited)
+                        depth[v_prev] = unvisited[v_prev] = ndepth[min(connected, key=ndepth.get)]
+            except: pass
+    
+        if return_map is True:
+            qubits = []
+            edges = []
+            depths = []
+            for q in visited[1:]:
+                qubits.append(q)
+                edges.append(path[q][-2:])
+                depths.append(length[q])
+                
+            output = qubits, edges, depths
+            
+        else:
+            cx_instr = []
+            for q in visited[1:]:
+                c, t = path[q][-2:]
+                cx_instr.append((visited.index(c), visited.index(t)))
+            initial_layout = visited
+            
+            output = cx_instr, initial_layout, depth[u], error_dict
+            
+        return output
+        
 
     def gen_fid_circuits(self, delays=[0], dynamic_decoupling=False, pi_pulse=True, pulses=4):
 
@@ -455,6 +536,16 @@ def lim_array(array):
         n_prev = n
         
     return array
+
+def instr_to_cx_instr(instr):
+    initial_layout = list(dict.fromkeys([q for edge in instr for q in edge]))
+    cx_instr = [(initial_layout.index(a), initial_layout.index(b)) for (a, b) in instr]
+    
+    return cx_instr, initial_layout
+    
+def cx_instr_to_instr(cx_instr, initial_layout):
+    
+    return [(initial_layout[a], initial_layout[b]) for (a, b) in cx_instr]
 
 
 if __name__ == "__main__":

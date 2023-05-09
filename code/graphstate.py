@@ -96,7 +96,7 @@ class GraphState(EntangleBase):
         unconnected_edges = self.edge_list.copy()
         depths = []
         # Apply Hadamard gates to every qubit
-        circ.h(list(range(self.nqubits)))
+        circ.h(self.qubits)
         # Connect every edge with cz gates
         while unconnected_edges:
             connected_qubits = []  # Qubits already connected in the current time step
@@ -117,15 +117,15 @@ class GraphState(EntangleBase):
 
         return circ
 
-    def run_qst(self, reps=1, shots=4096, delay=None, dd=None, qrem=False, 
-                sim=None, output='default', execute_only=False):
+    def run_qst(self, reps=1, shots=4096, delay=None, dd=None, pulserate=4, 
+                qrem=False, sim=None, output='default', execute_only=False):
         """
         Run entire QST program to obtain qubit pair density matrices with
         option to only send job request
 
         """
 
-        self.gen_qst_circuits(delay, dd)
+        self.gen_qst_circuits(delay, dd, pulserate)
         job = self.run_qst_circuits(reps, shots, qrem, sim)
 
         if execute_only is True:  # If only executing job
@@ -203,7 +203,7 @@ class GraphState(EntangleBase):
 
         return batches
 
-    def gen_qst_circuits(self, delay=None, dd=None, pulserate=0):
+    def gen_qst_circuits(self, delay=None, dd=None, pulserate=4):
         """
         Generates (parallelised) quantum state tomography circuits
 
@@ -227,20 +227,20 @@ class GraphState(EntangleBase):
                 tdelay = fdelay - 2*self.tx
                 fqdelay = self.format_delays(tdelay/4, unit='dt')
                 graphstate.delay(fqdelay)
-                graphstate.x(range(self.nqubits))
+                graphstate.x(self.qubits)
                 graphstate.delay(2*fqdelay)
-                graphstate.x(range(self.nqubits))
+                graphstate.x(self.qubits)
                 graphstate.delay(fqdelay)
             elif dd == 'pdd':
-                pulses = int(0.5*pulserate*delay)/2
+                pulses = int(0.5*pulserate*delay)*2
                 dt = self.format_delays((fdelay - pulses*self.tx)/pulses, unit='dt')
-                padding = self.format_delays((fdelay - dt*pulses)/2, unit='dt')
+                padding = self.format_delays(dt/2, unit='dt')
                 
                 graphstate.delay(padding)
-                graphstate.x(range(self.nqubits))
+                graphstate.x(self.qubits)
                 for i in range(pulses - 1):
                     graphstate.delay(dt)
-                    graphstate.x(range(self.nqubits))
+                    graphstate.x(self.qubits)
                 graphstate.delay(padding)
         
 
@@ -346,7 +346,7 @@ class GraphState(EntangleBase):
         elif sim == "ideal":
             backend = Aer.get_backend('aer_simulator')
             job = execute(circ_list, backend=backend, 
-                          initial_layout=list(range(self.nqubits)),
+                          initial_layout=self.qubits,
                           shots=shots)
         elif sim == "device":
             # Obtain device and noise model parameters
@@ -542,12 +542,12 @@ class GraphState(EntangleBase):
 
         """
 
-        circ0 = QuantumCircuit(self.nqubits, name='qrem0')
-        circ0.measure_all()
+        circ0 = QuantumCircuit(self.nqubits, self.nqubits, name='qrem0')
+        circ0.measure(self.qubits, self.qubits)
 
-        circ1 = QuantumCircuit(self.nqubits, name='qrem1')
-        circ1.x(range(self.nqubits))
-        circ1.measure_all()
+        circ1 = QuantumCircuit(self.nqubits, self.nqubits, name='qrem1')
+        circ1.x(self.qubits)
+        circ1.measure(self.qubits, self.qubits)
 
         self.qrem_circuits = [circ0, circ1]
 
